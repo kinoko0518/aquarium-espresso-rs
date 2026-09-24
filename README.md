@@ -1,75 +1,112 @@
-# Aquarium Espresso
+# Aquarium Espresso (Rust)
 
 ![Aquarium Espresso](screenshot.jpg)
 
+ESP32-S3向けに制作された癒やしの熱帯魚水槽「Aquarium Espresso」を、Rust + Macroquad へ移植したデスクトップ向けアクアリウムです。
+Linux (Hyprland / hyprwinwrap、X11、Wayland) などの環境で、デスクトップ壁紙やスクリーンセーバー、ウィンドウとして鑑賞できます。
 
+グッピー、ネオンテトラ、ブラックテトラ、コリドラスのほか、稀にヤマトヌマエビも出現します。
+（時にはエビフライが泳ぎだすことも……？）
 
-A small tropical fish tank on an ESP32-S3 + ST7789 (320x240, landscape).
+基本的には眺めるだけの癒やしプログラムですが、水面をクリックして波紋を起こしたり、背景を切り替えたりできます。
 
-Guppies, neon tetras, black tetras and corydoras — plus the occasional Amano shrimp. (And maybe something else?)
+---
 
-There is nothing for you to do.
+## 主な機能
 
-It is just a small world to watch, and relax.
+- **波紋・コースティクス光響レンダリング**: 水面揺らぎとコースティクス（集光模様）をリアルタイムに計算。
+- **魚たちの自律行動**: 群れや単独で優雅に泳ぎ回るフィッシュAI。
+- **5種類の背景水槽**: 起動時の指定やホットキーによるリアルタイム切り替え。
+- **オリジナルキャラクターの遊泳**: カレントディレクトリに `fish.png` を配置すると、オリジナルキャラが水槽内を泳ぎます。
+- **インタラクティブ操作**: マウスクリックで水面をタップして魚たちの反応を楽しめます。
+- **低負荷設計**: hyprwinwrap 等での常駐壁紙利用を考慮し、デフォルト 24 FPS 制限およびゼロアロケーション描画パイプラインを実装。
 
+---
 
+## 起動・操作方法
 
-## Wiring
+### コマンドライン引数
 
-|ST7789|ESP32-S3|
-|-|-|
-|SCLK|GPIO12|
-|MOSI|GPIO11|
-|DC|GPIO9|
-|CS|GPIO10|
-|RST|tied to 3V3 (set `PIN\_TFT\_RST` to 8 to use it)|
-|BLK|tied to 3V3 (use `PIN\_TFT\_BLK` to drive it from a GPIO)|
+```bash
+# デフォルト（背景ランダム、24 FPS）
+cargo run --release
 
-|microSD|ESP32-S3|
-|-|-|
-|SCLK|GPIO5|
-|MISO|GPIO6|
-|MOSI|GPIO7|
-|CS|GPIO4|
+# 背景番号（0〜4）を指定して起動
+cargo run --release -- --bg 2
 
+# フレームレートを指定して起動（例: 30 FPS や 60 FPS）
+cargo run --release -- --fps 30
+```
 
+### 操作キー
 
-## Build / flash
+| キー / 操作 | 動作 |
+|---|---|
+| `Space` / `B` | 背景画像を順番に切り替え（全5種） |
+| `R` | シミュレーションのリセット（魚や泡を初期状態に戻す） |
+| `E` | エビフライモード（グッピーがエビフライに変身） |
+| `左クリック` | 水面をタップ（波紋が発生し、近くの魚が驚いて逃げます） |
+| `Q` / `Esc` | 終了 |
 
+### オリジナルキャラを泳がせる
 
+透過PNG画像（推奨: `126px x 128px` 程度）を `fish.png` という名前で実行ディレクトリに配置すると、グッピーの一部がオリジナルキャラクターに置き換わって水槽内を泳ぎます。
 
-Build and flash with the Arduino IDE.
+---
 
-The settings you need are:
+## ビルド方法
 
+### Nix を使用する場合 (推奨)
 
+Nix Flakes を使用して簡単にビルド・実行できます。
 
-PSRAM=OPI
+```bash
+# 直接実行
+nix run
 
-FlashSize=16M
+# 開発環境に入る
+nix develop
+cargo run --release
+```
 
-PartitionScheme=huge\_app
+### 通常の Cargo でビルドする場合
 
+以下のライブラリ（グラフィックス・ウィンドウ関連）が必要です。
 
-You also need to install LovyanGFX as a library.
+- **Debian / Ubuntu**:
+  `sudo apt install pkg-config libx11-dev libxi-dev libgl1-mesa-dev libxcursor-dev libxrandr-dev libxkbcommon-dev`
+- **Arch Linux**:
+  `sudo pacman -S libx11 libxi mesa libxcursor libxrandr libxkbcommon`
 
+```bash
+cargo build --release
+```
 
-## Swimming your own character
+バイナリは `target/release/aquarium-espresso-rs` に生成されます。
 
+---
 
+## hyprwinwrap（Hyprlandの背景壁紙化）での利用例
 
-Make a transparent PNG of 126px x 128px, save it on the SD card as fish.png, and one to three of the guppies are replaced by your character.
+Hyprland 環境において、`hyprwinwrap` プラグインを使ってデスクトップの動的壁紙として常駐させることができます。
 
-If you do not want your own character, you do not have to connect the SD card reader at all.
+`hyprland.conf`:
+```conf
+plugin {
+    hyprwinwrap {
+        # 対象ウィンドウクラス
+        class = aquarium-espresso-rs
+    }
+}
 
+# 起動例 (exec-once)
+exec-once = aquarium-espresso-rs
+```
 
+---
 
-## License
+## ライセンス・クレジット
 
-
-
-Copyright of this project belongs to mochimochi-man / Uh (X : calorie0).
-
-It is MIT licensed, so please feel free to use it.
-
-The bundled images were generated with AI, using Grok and Gemini.
+- **オリジナル版作者**: もちもちまん / Uh ([@calorie0](https://x.com/calorie0))
+- **ライセンス**: [MIT License](LICENSE)
+- 同梱の背景画像等は AI（Grok, Gemini）により生成されたものです。
