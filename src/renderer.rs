@@ -177,6 +177,10 @@ pub fn circle_outline_aa(fb: &mut [u8], cx: f32, cy: f32, r: f32, lw: f32, red: 
     let y0 = (cy - ro - 1.0).floor().clamp(0.0, FB_H as f32) as usize;
     let y1 = (cy + ro + 1.0).ceil().clamp(0.0, FB_H as f32) as usize;
     let half = lw * 0.5;
+    let r_in = (r - half).max(0.0);
+    let r_out = r + half;
+    let r_in2 = r_in * r_in;
+    let r_out2 = r_out * r_out;
     for y in y0..y1 {
         for x in x0..x1 {
             let mut cov = 0.0f32;
@@ -184,8 +188,8 @@ pub fn circle_outline_aa(fb: &mut [u8], cx: f32, cy: f32, r: f32, lw: f32, red: 
                 for sx in 0..2 {
                     let px = x as f32 + 0.25 + sx as f32 * 0.5;
                     let py = y as f32 + 0.25 + sy as f32 * 0.5;
-                    let d = ((px - cx) * (px - cx) + (py - cy) * (py - cy)).sqrt();
-                    if (d - r).abs() <= half {
+                    let d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+                    if d2 >= r_in2 && d2 <= r_out2 {
                         cov += 0.25;
                     }
                 }

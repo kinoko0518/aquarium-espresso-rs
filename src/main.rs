@@ -1,20 +1,21 @@
 #![allow(dead_code)]
 use ::rand::Rng;
-use macroquad::prelude::*;
 use image::ImageFormat;
+use macroquad::prelude::*;
+use std::time::Instant;
 
-mod fastmath;
-mod bubbles;
-mod light;
-mod rig;
 mod art;
-mod sim;
+mod bubbles;
+mod fastmath;
+mod light;
 mod renderer;
+mod rig;
+mod sim;
 
 use bubbles::BubblesState;
-use light::{prep_backdrop, LightState, SCR_W, SCR_H};
-use sim::Sim;
+use light::{prep_backdrop, LightState, SCR_H, SCR_W};
 use renderer::render_frame;
+use sim::Sim;
 
 const BG_BYTES: [&[u8]; 5] = [
     include_bytes!("../assets/bg0.jpg"),
@@ -50,7 +51,12 @@ async fn main() {
             .expect("Failed to decode background JPEG")
             .to_rgb8();
         let mut rgb = img.into_raw();
-        assert_eq!(rgb.len(), SCR_W * SCR_H * 3, "Backdrop {} dimensions mismatch", i);
+        assert_eq!(
+            rgb.len(),
+            SCR_W * SCR_H * 3,
+            "Backdrop {} dimensions mismatch",
+            i
+        );
         prep_backdrop(&mut rgb);
         backdrops.push(rgb);
     }
@@ -73,34 +79,53 @@ async fn main() {
     };
     println!("Active backdrop: {}", current_bg);
 
+    let mut target_fps = 24.0f64;
+    for i in 0..args.len() {
+        if args[i] == "--fps" && i + 1 < args.len() {
+            if let Ok(v) = args[i + 1].parse::<f64>() {
+                if v > 0.0 && v <= 240.0 {
+                    target_fps = v;
+                }
+            }
+        }
+    }
+    println!("Target framerate: {:.1} FPS", target_fps);
+    let target_frame_dur = std::time::Duration::from_secs_f64(1.0 / target_fps);
+
     let mut light = LightState::new();
     let mut bubbles = BubblesState::new();
     let mut sim = Sim::new();
 
     // Check for optional card fish
     if let Ok(card_img) = image::open("fish.png") {
-        let card_rgba = card_img.resize_exact(
-            rig::CARD_W as u32,
-            rig::CARD_H as u32,
-            image::imageops::FilterType::Lanczos3,
-        ).to_rgba8();
-        println!("Loaded custom card fish from fish.png ({}x{})", card_rgba.width(), card_rgba.height());
+        let card_rgba = card_img
+            .resize_exact(
+                rig::CARD_W as u32,
+                rig::CARD_H as u32,
+                image::imageops::FilterType::Lanczos3,
+            )
+            .to_rgba8();
+        println!(
+            "Loaded custom card fish from fish.png ({}x{})",
+            card_rgba.width(),
+            card_rgba.height()
+        );
     }
 
-    // RGBA framebuffer and texture
-    let mut fb = vec![0u8; SCR_W * SCR_H * 4];
-    let image = Image {
-        bytes: fb.clone(),
+    // RGBA framebuffer image and reusable GPU texture (zero-allocation per frame)
+    let mut fb_image = Image {
+        bytes: vec![0u8; SCR_W * SCR_H * 4],
         width: SCR_W as u16,
         height: SCR_H as u16,
     };
-    let texture = Texture2D::from_image(&image);
+    let texture = Texture2D::from_image(&fb_image);
     texture.set_filter(FilterMode::Linear);
 
     let mut last_tap_time = 0.0;
 
     loop {
-        let dt = get_frame_time().min(0.06);
+        let frame_start = Instant::now();
+        let dt = (1.0 / target_fps as f32).min(0.06);
         let time = get_time();
 
         // Input handling
@@ -161,15 +186,17 @@ async fn main() {
         light.step(dt, bubbles.air_agitation());
         sim.step(dt, &bubbles);
 
-        // Render frame
-        render_frame(&mut fb, &backdrops[current_bg], &light, &bubbles, &sim);
+        // Render frame directly into fb_image buffer (zero clones / zero heap allocations)
+        render_frame(
+            &mut fb_image.bytes,
+            &backdrops[current_bg],
+            &light,
+            &bubbles,
+            &sim,
+        );
 
         // Upload to GPU texture
-        texture.update(&Image {
-            bytes: fb.clone(),
-            width: SCR_W as u16,
-            height: SCR_H as u16,
-        });
+        texture.update(&fb_image);
 
         // Clear and draw aspect-fill wallpaper
         clear_background(BLACK);
@@ -185,5 +212,11 @@ async fn main() {
         );
 
         next_frame().await;
+
+        // Sleep if frame completed faster than target_frame_dur
+        let elapsed = frame_start.elapsed();
+        if elapsed < target_frame_dur {
+            std::thread::sleep(target_frame_dur - elapsed);
+        }
     }
 }
