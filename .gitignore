@@ -13,3 +13,9 @@ tools/preview_*.png
 .vscode/
 .DS_Store
 Thumbs.db
+
+
+# Added by cargo
+
+/target
+/result
