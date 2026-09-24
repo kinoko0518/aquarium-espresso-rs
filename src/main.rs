@@ -56,7 +56,23 @@ async fn main() {
     }
     println!("Loaded and tone-mapped {} tank backdrops.", backdrops.len());
 
-    let mut current_bg = 0usize;
+    let args: Vec<String> = std::env::args().collect();
+    let mut current_bg = {
+        let mut bg_idx = None;
+        for i in 0..args.len() {
+            if args[i] == "--bg" && i + 1 < args.len() {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    bg_idx = Some(v % backdrops.len());
+                }
+            }
+        }
+        bg_idx.unwrap_or_else(|| {
+            let mut rng = ::rand::thread_rng();
+            rng.gen_range(0..backdrops.len())
+        })
+    };
+    println!("Active backdrop: {}", current_bg);
+
     let mut light = LightState::new();
     let mut bubbles = BubblesState::new();
     let mut sim = Sim::new();
